@@ -3,7 +3,7 @@
 This is the browser page behind a TAB share link (`https://tab.aabder.xyz/view#<token>`). It shows a shared trip live:
 
 - **Map:** the car's position, its direction and GPS accuracy, and the route so far. It uses the app's colours and the same OpenFreeMap style.
-  - The car glides smoothly from one fix to the next, and the camera stays locked on it.
+  - The trip is played back about 2 s behind the newest fix, as in the app. The car therefore moves continuously and at an even speed instead of stopping at every fix, and the route is drawn exactly up to the car. The camera stays locked on it.
   - Zooming keeps the lock.
   - Panning the map releases it, and a **Recenter** button appears at the top to lock on again.
 - **Status card:** speed, distance, time, average, moving average and max, computed live.
@@ -11,13 +11,15 @@ This is the browser page behind a TAB share link (`https://tab.aabder.xyz/view#<
   - The **LIVE** badge at the top of the page becomes **Go live** while you're looking back.
   - Pressing **Go live** jumps to the current position and follows it again.
 
-The backend (`tab_service`) only stores raw GPS samples. The viewer derives everything with `src/geo/track.ts`, `gaps.ts`, `spline.ts`, `stats.ts` and `speedColors.ts`. These are copies of the same files in `tab_mobile/src/geo/`. **Keep them in sync** so the route and numbers on the web match the app:
+The backend (`tab_service`) only stores raw GPS samples. The viewer derives everything with `src/geo/track.ts`, `gaps.ts`, `spline.ts`, `playback.ts`, `stats.ts` and `speedColors.ts`. These are copies of the same files in `tab_mobile/src/geo/`. **Keep them in sync** so the route and numbers on the web match the app:
 - the filtered track, held still while standing still,
 - the route drawn as a smooth curve,
 - dotted lines where there was no GPS,
 - the same distance and speeds.
 
 Stack: Vite, React, TypeScript, MapLibre GL JS and the SignalR client. The build output is static files, served by nginx.
+
+How it works inside (data flow, calculations, drawing, reconnects): see [TECHNICAL.md](TECHNICAL.md).
 
 ## How it fits together
 

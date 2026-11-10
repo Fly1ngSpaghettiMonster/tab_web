@@ -7,6 +7,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
+import { BearingSmoother, PlaybackClock, poseAt, routeUpTo, type Route } from '../geo/playback';
 import { colors, MAP_STYLE_URL, ROUTE_REST_COLOR } from '../theme';
 
 maplibregl.setWorkerUrl(workerUrl);
@@ -31,6 +32,12 @@ type Props = {
   /** Dotted lines through coarse Wi-Fi/cell fixes (stretches without GPS). */
   coarseLines: Line[];
   position: MapPosition | null;
+  /**
+   * Live mode with a track: play it back slightly in the past (see geo/playback.ts). The car, the
+   * end of the route and the camera then move together and continuously; `routeDone` and the
+   * position's coordinates and bearing are not used.
+   */
+  playback: Route | null;
   /** Live mode: glide the marker to each new fix instead of jumping, and draw the route up to the marker. */
   animate: boolean;
   /** Whether the camera is locked to the marker. */
@@ -39,6 +46,8 @@ type Props = {
   onUserPan: () => void;
   /** Shown in a popup above the position marker (timeline scrubbing). */
   popup: ReactNode | null;
+  /** The car marker was clicked (toggles the details popup while scrubbing). */
+  onCarClick: () => void;
 };
 
 type Pose = { lon: number; lat: number; bearing: number };
@@ -80,7 +89,7 @@ function lerpAngle(a: number, b: number, t: number): number {
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 
-export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, following, onUserPan, popup }: Props) {
+export function LiveMap({ routeDone, routeRest, coarseLines, position, playback, animate, following, onUserPan, popup, onCarClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -102,8 +111,13 @@ export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, 
   // (MapLibre stops gestures on jumpTo/easeTo), so the camera waits until it is released.
   const pressed = useRef(false);
   const frame = useRef(0);
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
+  const playing = playback != null;
   const onUserPanRef = useRef(onUserPan);
   onUserPanRef.current = onUserPan;
+  const onCarClickRef = useRef(onCarClick);
+  onCarClickRef.current = onCarClick;
 
   // Create the map once.
   useEffect(() => {
@@ -174,9 +188,14 @@ export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, 
     // Only the puck turns with the direction of travel; the speed bubble stays upright at its top right.
     el.className = 'car';
     el.innerHTML = '<div class="puck"><div class="arrow"></div></div><div class="speed-bubble" hidden><span class="speed-value"></span><span class="speed-unit">km/h</span></div>';
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onCarClickRef.current();
+    });
     puckRef.current = el.querySelector('.puck');
     bubbleRef.current = el.querySelector('.speed-bubble');
-    markerRef.current = new maplibregl.Marker({ element: el });
+    // Placed at sub-pixel positions like the route line, so the car does not jitter against it.
+    markerRef.current = new maplibregl.Marker({ element: el, subpixelPositioning: true });
     popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 22, maxWidth: '260px' }).setDOMContent(popupNode);
 
     mapRef.current = map;
@@ -207,12 +226,13 @@ export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, 
   }, [following, loaded]);
 
   /** Draws the marker, accuracy circle, route head and camera at the given pose. */
-  const draw = (pose: Pose) => {
+  const draw = (pose: Pose, head?: [number, number][]) => {
     const map = mapRef.current!;
     markerRef.current!.setLngLat([pose.lon, pose.lat]);
     puckRef.current!.style.transform = `rotate(${pose.bearing}deg)`;
     (map.getSource('accuracy') as GeoJSONSource).setData({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [pose.lon, pose.lat] } });
-    (map.getSource('route-head') as GeoJSONSource).setData(headFrom.current ? line([headFrom.current, [pose.lon, pose.lat]]) : EMPTY_LINE);
+    const headLine = head ?? (headFrom.current ? [headFrom.current, [pose.lon, pose.lat] as [number, number]] : null);
+    (map.getSource('route-head') as GeoJSONSource).setData(headLine && headLine.length >= 2 ? line(headLine) : EMPTY_LINE);
     if (popupRef.current!.isOpen()) popupRef.current!.setLngLat([pose.lon, pose.lat]);
     // Don't fight the user's zoom gesture or a recenter animation; the camera catches up right after.
     if (followingRef.current && !pressed.current && !map.isZooming() && performance.now() > recenteringUntil.current) {
@@ -241,17 +261,62 @@ export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loaded) return;
+    (map.getSource('route-rest') as GeoJSONSource).setData(lines(routeRest));
+    (map.getSource('coarse') as GeoJSONSource).setData(lines(coarseLines));
+    // The playback loop draws the route itself.
+    if (playing) return;
     const lastLine = routeDone[routeDone.length - 1];
     const live = animate && lastLine != null && lastLine.length >= 2;
     headFrom.current = live ? lastLine[lastLine.length - 2] : null;
     (map.getSource('route-done') as GeoJSONSource).setData(lines(live ? [...routeDone.slice(0, -1), lastLine.slice(0, -1)] : routeDone));
-    (map.getSource('route-rest') as GeoJSONSource).setData(lines(routeRest));
-    (map.getSource('coarse') as GeoJSONSource).setData(lines(coarseLines));
     if (!live) (map.getSource('route-head') as GeoJSONSource).setData(EMPTY_LINE);
     else if (shown.current && !glide.current) draw(shown.current);
     // draw only reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, animate, routeDone, routeRest, coarseLines]);
+  }, [loaded, playing, animate, routeDone, routeRest, coarseLines]);
+
+  // Playback: every frame, the car's pose at the playback clock's time. The passed route is only
+  // re-sent when the car passes a fix or new fixes arrive; the head up to the car every frame.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !playing) return;
+    cancelAnimationFrame(frame.current);
+    glide.current = null;
+    const clock = new PlaybackClock();
+    const bearing = new BearingSmoother();
+    let lastFrameMs = performance.now();
+    let drawnRoute: Route | null = null;
+    let drawnIndex = -1;
+    let id = 0;
+    const loop = () => {
+      id = requestAnimationFrame(loop);
+      const route = playbackRef.current;
+      const n = route?.times.length ?? 0;
+      if (!route || n === 0) return;
+      const now = performance.now();
+      const dt = now - lastFrameMs;
+      lastFrameMs = now;
+      const p = poseAt(route, clock.tick(now, route.times[n - 1]));
+      if (!p) return;
+      if (route !== drawnRoute || p.index !== drawnIndex) {
+        drawnRoute = route;
+        drawnIndex = p.index;
+        (map.getSource('route-done') as GeoJSONSource).setData(lines(routeUpTo(route, p.index)));
+      }
+      const pose = { lon: p.longitude, lat: p.latitude, bearing: bearing.update(p.course, p.gpsBearing, map.getZoom(), dt) };
+      if (!shown.current) {
+        // First position: put the car in the middle at a street-level zoom.
+        markerRef.current!.setLngLat([pose.lon, pose.lat]).addTo(map);
+        if (followingRef.current) map.jumpTo({ center: [pose.lon, pose.lat], zoom: FOLLOW_ZOOM });
+      }
+      shown.current = pose;
+      draw(pose, p.head);
+    };
+    id = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(id);
+    // draw only reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, playing]);
 
   // New position: glide to it (live) or jump to it (scrubbing, first fix, big jumps).
   const lat = position?.latitude;
@@ -272,6 +337,11 @@ export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, 
     }
     // Circle radius is in pixels: convert metres to pixels at zoom 22 and let it scale with zoom (as in the app).
     map.setPaintProperty('accuracy', 'circle-radius', ['interpolate', ['exponential', 2], ['zoom'], 0, 0, 22, accuracy / metersPerPixelAtZoom22(lat)]);
+    // The playback loop moves the car.
+    if (playing) {
+      wasAnimating.current = animate;
+      return;
+    }
 
     const target: Pose = { lon, lat, bearing };
     const now = performance.now();
@@ -299,18 +369,22 @@ export function LiveMap({ routeDone, routeRest, coarseLines, position, animate, 
     frame.current = requestAnimationFrame(tick);
     // tick/draw only read refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, animate, lat, lon, accuracy, bearing]);
+  }, [loaded, playing, animate, lat, lon, accuracy, bearing]);
 
-  // Speed bubble: whole km/h.
+  // Speed bubble: whole km/h. Hidden while the details popup is open (it shows the speed too).
   const speedKmh = position?.speedMps != null && position.speedMps >= 0 ? Math.round(position.speedMps * 3.6) : null;
+  const hasPopup = popup != null;
   useEffect(() => {
     const bubble = bubbleRef.current!;
-    bubble.hidden = speedKmh == null;
+    bubble.hidden = speedKmh == null || hasPopup;
     bubble.querySelector('.speed-value')!.textContent = speedKmh == null ? '' : String(speedKmh);
     bubble.title = speedKmh == null ? '' : `${speedKmh} km/h`;
-  }, [speedKmh]);
+  }, [speedKmh, hasPopup]);
 
-  const hasPopup = popup != null;
+  // While looking back the car can be clicked for details.
+  useEffect(() => {
+    markerRef.current?.getElement().classList.toggle('clickable', !animate);
+  }, [animate]);
   useEffect(() => {
     const map = mapRef.current;
     const p = popupRef.current!;
