@@ -1,0 +1,219 @@
+/* Colours from src/theme.ts (same as the app). */
+:root {
+  --primary: #043870;
+  --accent: #029ee1;
+  --danger: #d32f2f;
+  --background: #ffffff;
+  --surface: #f2f6fa;
+  --border: #d9e2ec;
+  --text: #0b1b2b;
+  --text-muted: #5b6b7b;
+  --on-primary: #ffffff;
+  --shadow: 0 2px 10px rgba(4, 56, 112, 0.18);
+  /* Width of the status card and the speed graph (a quarter of the screen, never narrower than
+     the tiles need). The timeline sits centred between the two graph-side columns. */
+  --side-w: max(340px, calc(25cqw - 24px));
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body { background: var(--surface); }
+
+.app, .map-wrap { position: relative; height: 100%; overflow: hidden; }
+/* The viewer lays itself out by its own width (it is narrower inside the admin dashboard). */
+.app { container-type: inline-size; }
+.map { position: absolute; inset: 0; }
+.muted { color: var(--text-muted); }
+.small { font-size: 12px; }
+
+/* Top overlay: status card on the left, LIVE / Go live / Recenter in the middle. */
+.hud {
+  position: absolute; top: 12px; left: 12px; right: 12px; pointer-events: none;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: start;
+}
+.hud > * { pointer-events: auto; }
+.top-center { grid-column: 2; display: flex; gap: 8px; align-items: center; }
+.top-center:empty { display: none; }
+
+/* Status card (tiles mirror the app's StatTile). */
+.card {
+  grid-column: 1; justify-self: start; width: var(--side-w);
+  background: var(--background); border-radius: 16px; padding: 12px;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px;
+}
+.card p { margin: 0; text-align: center; }
+.card-head { display: flex; align-items: center; justify-content: space-between; }
+.brand { font-weight: 800; letter-spacing: 2px; color: var(--primary); }
+.brand.big { font-size: 40px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.tile-label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+.tile-value { color: var(--primary); font-size: 18px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.tile-unit { color: var(--text-muted); font-size: 12px; font-weight: 400; }
+
+/* Position marker (same look as the app's puck) with the speed bubble overlapping its top right. */
+.car { position: relative; width: 34px; height: 34px; }
+.speed-bubble {
+  /* A fixed-size circle that fits "188" above "km/h". */
+  position: absolute; left: 22px; top: -20px; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--primary); color: var(--on-primary); border: 2px solid #fff; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  line-height: 1; pointer-events: none;
+}
+.speed-value { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+.speed-unit { font-size: 8px; font-weight: 600; opacity: 0.85; }
+.speed-bubble[hidden] { display: none; }
+.puck {
+  width: 34px; height: 34px; border-radius: 50%; background: #fff; box-shadow: var(--shadow);
+  display: flex; align-items: center; justify-content: center;
+}
+.arrow {
+  width: 0; height: 0; margin-bottom: 3px;
+  border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 18px solid var(--primary);
+}
+
+
+.banner {
+  position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%);
+  background: var(--primary); color: var(--on-primary); padding: 8px 16px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; box-shadow: var(--shadow); white-space: nowrap;
+}
+
+/* Timeline: YouTube-live style scrub bar. */
+.pill {
+  font: inherit; font-size: 13px; font-weight: 800; padding: 7px 14px; border-radius: 999px; white-space: nowrap;
+  border: none; letter-spacing: 0.5px; box-shadow: var(--shadow); background: var(--background); color: var(--text-muted);
+}
+.pill-live { background: var(--danger); color: var(--on-primary); }
+.pill-connecting, .pill-reconnecting { background: #f9a825; color: var(--on-primary); }
+.pill-go { background: var(--accent); color: var(--on-primary); cursor: pointer; }
+.pill-recenter { background: var(--primary); color: var(--on-primary); cursor: pointer; }
+.pill-go:hover, .pill-recenter:hover { filter: brightness(1.12); }
+
+/* Bottom centre: the clock card sits on top of the timeline card, which takes half the screen width. */
+.timeline-dock {
+  position: absolute; left: 25%; right: 25%; bottom: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.timeline-dock > * { pointer-events: auto; }
+.time-card {
+  background: var(--background); border-radius: 12px; box-shadow: var(--shadow); padding: 6px 14px;
+  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.timeline {
+  align-self: stretch; background: var(--background); border-radius: 16px; box-shadow: var(--shadow);
+  display: flex; align-items: center; padding: 10px 16px;
+}
+
+.scrub {
+  flex: 1 1 auto; width: 100%; min-width: 0; height: 24px; margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer;
+}
+.scrub::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 3px;
+  background: linear-gradient(to right, var(--danger) var(--pct), var(--border) var(--pct));
+}
+.scrub::-moz-range-track { height: 5px; border-radius: 3px; background: var(--border); }
+.scrub::-moz-range-progress { height: 5px; border-radius: 3px; background: var(--danger); }
+.scrub::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%;
+  background: var(--danger); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  transition: transform 0.1s;
+}
+.scrub:active::-webkit-slider-thumb, .scrub:hover::-webkit-slider-thumb { transform: scale(1.25); }
+.scrub::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--danger); border: 2px solid #fff; }
+
+/* Analytics at the scrubbed moment, shown on the map. */
+.maplibregl-popup-content { border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow); }
+.details-time { font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.details dl { display: grid; grid-template-columns: auto auto; gap: 2px 12px; margin: 0; font-size: 13px; }
+.details dt { color: var(--text-muted); }
+.details dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+.message { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.message h1 { color: var(--primary); font-size: 22px; margin: 12px 0 4px; }
+
+/* Narrow screens: the card becomes a strip across the top, the controls go below it. */
+@container (max-width: 900px) {
+  .hud { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .card { align-self: stretch; width: auto; max-width: 480px; margin: 0 auto; width: 100%; }
+}
+@container (max-width: 640px) {
+  .hud { top: 8px; left: 8px; right: 8px; }
+  .card { padding: 8px; gap: 6px; max-width: none; }
+  .tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .tile { padding: 6px 8px; }
+  .tile-value { font-size: 15px; }
+  .tile-label { font-size: 10px; }
+  .maplibregl-ctrl-top-right { top: 170px; }
+  .timeline-dock { bottom: 8px; width: auto; left: 8px; right: 8px; transform: none; }
+  .timeline { padding: 8px 12px; }
+  .banner { bottom: 104px; }
+}
+
+/* On phones the timeline spans the width: keep the map attribution above it. */
+@container (max-width: 640px) {
+  .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: 98px; }
+}
+
+/* Speed graph: bottom-left, between the screen edge and the timeline (which spans 25%-75%). */
+.speed-graph {
+  position: absolute; left: 12px; bottom: 12px; width: var(--side-w);
+  background: var(--background); border-radius: 16px; box-shadow: var(--shadow); padding: 12px;
+  display: flex; flex-direction: column;
+}
+.graph-plot { flex: 1; min-height: 0; }
+/* Wide screens: graph bottom-left, timeline centred in the space between it and the mirrored right column. */
+@container (min-width: 1100px) {
+  .timeline-dock { left: calc(var(--side-w) + 24px); right: calc(var(--side-w) + 24px); }
+}
+@container (max-width: 1099px) { .speed-graph { display: none; } }
+.speed-graph svg { display: block; cursor: pointer; touch-action: none; user-select: none; }
+.graph-title { font-size: 12px; font-weight: 700; color: var(--primary); margin: 0 0 4px; }
+.graph-title .muted { font-weight: 400; }
+.speed-graph .grid { stroke: var(--border); stroke-width: 1; }
+.speed-graph .axis { fill: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.speed-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.speed-graph .cursor { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; }
+.speed-graph .cursor-dot { stroke: #fff; stroke-width: 2; }
+.speed-graph .crosshair { stroke: var(--text-muted); stroke-width: 1; }
+.speed-graph .hover-label { fill: var(--text); font-size: 10px; font-weight: 600; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+
+/* Admin dashboard: journey list on the left, the viewer on the right. */
+.admin { display: flex; height: 100%; }
+.admin-list {
+  width: 300px; flex: none; display: flex; flex-direction: column; background: var(--background);
+  border-right: 1px solid var(--border); min-height: 0;
+}
+.admin-head { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 8px; }
+.admin-search {
+  margin: 0 12px 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+  font: inherit; font-size: 13px; background: var(--surface); color: var(--text);
+}
+.admin-search:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.admin-error { color: var(--danger); margin: 0 16px 8px; }
+.admin-list ul { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
+.admin-item {
+  width: 100%; text-align: left; font: inherit; color: var(--text); background: none; border: 1px solid transparent;
+  border-radius: 12px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 3px;
+}
+.admin-item:hover { background: var(--surface); }
+.admin-item.selected { background: var(--surface); border-color: var(--accent); }
+.admin-item-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.admin-date { font-weight: 700; color: var(--primary); font-size: 14px; }
+.admin-id { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-none { padding: 12px; }
+.chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip-live { background: var(--danger); color: var(--on-primary); }
+.chip-ended { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
+.chip-expired { background: #fff4d6; color: #8a6100; }
+.admin-main { flex: 1; min-width: 0; position: relative; }
+.admin-empty { height: 100%; display: flex; align-items: center; justify-content: center; }
+.pill-back { background: var(--background); color: var(--primary); cursor: pointer; }
+/* Wide: list and viewer side by side, no back button needed. Narrow: one or the other. */
+@media (min-width: 801px) { .pill-back { display: none; } }
+@media (max-width: 800px) {
+  .admin-list { width: 100%; border-right: none; }
+  .admin.has-selection .admin-list, .admin:not(.has-selection) .admin-main { display: none; }
+}

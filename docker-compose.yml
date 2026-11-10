@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Only Nginx Proxy Manager should reach this port.
+      - "${TAB_WEB_PORT:-8082}:8080"
