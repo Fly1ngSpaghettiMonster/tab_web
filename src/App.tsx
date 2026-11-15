@@ -97,9 +97,12 @@ function TokenGate({ token, onAdmin }: { token: string; onAdmin: () => void }) {
 
 export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?: ReactNode; notFound?: string }) {
   const { status, session, samples, closeReason } = useLiveSession(join);
-  const track = useMemo(() => buildTrack(samples), [samples]);
   // Timeline position; null = follow the latest position.
   const [cursorMs, setCursorMs] = useState<number | null>(null);
+  // Smoothed like the app's trip review once the trip has ended or while looking back; forward
+  // only while playing back live, so the line under the moving car never shifts.
+  const smooth = status === 'ended' || cursorMs != null;
+  const track = useMemo(() => buildTrack(samples, { smooth }), [samples, smooth]);
   // Route up to the shown position and after it (grey while scrubbing).
   const route = useMemo(
     () => splitRoute(track, cursorMs != null && track.points.length > 0 ? indexAt(track, cursorMs) : null),
@@ -115,6 +118,7 @@ export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?
   // The speed graph is as tall as the status card.
   const cardRef = useRef<HTMLElement>(null);
   const cardHeight = useHeight(cardRef);
+  const [showDetails, setShowDetails] = useState(false);
   // Camera locked to the car; panning the map turns it off, Recenter / the timeline turn it back on.
   const [following, setFollowing] = useState(true);
 
@@ -128,6 +132,10 @@ export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?
   const endMs = n > 0 ? Math.max(track.times[n - 1], Date.parse(last.timestampUtc)) : 0;
   const scrubbing = cursorMs != null && n > 0;
   const index = scrubbing ? indexAt(track, cursorMs) : n - 1;
+
+  // Live, the track is played back slightly in the past so the car moves continuously (as in the
+  // app), as long as the newest sample is part of it; a coarse Wi-Fi/cell fix in a GPS gap is shown as it is.
+  const playable = !scrubbing && n > 0 && last != null && Date.parse(last.timestampUtc) - track.times[n - 1] <= MAX_PLAYBACK_LAG_MS;
 
   let position: MapPosition | null = null;
   if (scrubbing) {
@@ -148,7 +156,8 @@ export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?
   }
 
 
-  const popup = scrubbing ? (
+  // Details card above the car while looking back: toggled by clicking the car.
+  const popup = scrubbing && showDetails ? (
     <PointDetails
       timeMs={track.times[index]}
       speedMps={track.points[index].speedMps}
@@ -163,6 +172,16 @@ export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?
     setCursorMs(null);
     setFollowing(true);
   };
+  /** Moves the cursor one track point back or forward; forward past the last point goes live. */
+  const step = (direction: -1 | 1) => {
+    if (n === 0) return;
+    let next = index + direction;
+    // Points can share a timestamp; skip until the cursor really lands on another point.
+    while (next >= 0 && next < n && indexAt(track, track.times[next]) === index) next += direction;
+    if (next >= n) return goLive();
+    setCursorMs(track.times[Math.max(0, next)]);
+    setFollowing(true);
+  };
   return (
     <div className="app">
       <LiveMap
@@ -170,9 +189,11 @@ export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?
         routeRest={route.rest}
         coarseLines={track.coarseLines}
         position={position}
+        playback={playable ? track : null}
         animate={!scrubbing}
         following={following}
         onUserPan={() => setFollowing(false)}
+        onCarClick={() => setShowDetails((v) => !v)}
         popup={popup}
       />
       <div className="hud">
@@ -223,11 +244,17 @@ export function Viewer({ join, controls, notFound }: { join: JoinSpec; controls?
             setFollowing(true);
           }}
           onGoLive={goLive}
+          onStep={step}
+          canStepBack={index > 0}
+          canStepForward={scrubbing}
         />
       )}
     </div>
   );
 }
+
+// Same as the app: a newer sample this much later than the last track point is a GPS gap in progress.
+const MAX_PLAYBACK_LAG_MS = 3000;
 
 const PILL_TEXT: Record<LiveStatus, string> = {
   connecting: 'Connecting…',

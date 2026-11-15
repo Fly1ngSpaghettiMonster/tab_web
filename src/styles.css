@@ -98,13 +98,22 @@ body { background: var(--surface); }
   display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
 }
 .timeline-dock > * { pointer-events: auto; }
+.car.clickable { cursor: pointer; }
+/* One-data-point steps on either end of the timeline bar. */
+.step {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--surface); color: var(--primary); font-size: 20px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center; padding: 0 0 2px;
+}
+.step:hover:not(:disabled) { background: var(--border); }
+.step:disabled { opacity: 0.35; cursor: default; }
 .time-card {
   background: var(--background); border-radius: 12px; box-shadow: var(--shadow); padding: 6px 14px;
   font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .timeline {
   align-self: stretch; background: var(--background); border-radius: 16px; box-shadow: var(--shadow);
-  display: flex; align-items: center; padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
 }
 
 .scrub {
